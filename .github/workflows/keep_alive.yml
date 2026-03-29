@@ -1,48 +1,35 @@
-name: Keep HF Space Alive (Pro + Secure)
+- name: Ping HF Space (direct URL)
+  run: |
+    URL="https://codewithriz-buck-tracker.hf.space/auth/status"
 
-on:
-  schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes
-    # - cron: "0 9 * * *"   # 5 AM Canada (DST)
-    # - cron: "0 10 * * *"  # 5 AM Canada (non-DST)
+    MAX_RETRIES=5
+    RETRY_DELAY=10
 
-  workflow_dispatch:
+    echo "🚀 Starting ping to HF Space..."
+    echo "🔗 URL: $URL"
 
-jobs:
-  ping:
-    runs-on: ubuntu-latest
+    for i in $(seq 1 $MAX_RETRIES); do
+      echo "🔁 Attempt $i..."
 
-    steps:
-      - name: Ping HF Space (using secret)
-        env:
-          URL: ${{ secrets.HF_SPACE_URL }}
-        run: |
-          MAX_RETRIES=5
-          RETRY_DELAY=10
+      response=$(curl -s -L -w "\nHTTP_STATUS:%{http_code}" \
+        -X GET "$URL" \
+        -H "accept: application/json")
 
-          echo "🚀 Starting ping to HF Space..."
-          echo "🔗 URL: $URL"
+      body=$(echo "$response" | sed -e 's/HTTP_STATUS:.*//g')
+      status=$(echo "$response" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
 
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "🔁 Attempt $i..."
+      echo "📦 Response Body:"
+      echo "$body"
+      echo "📡 HTTP Status: $status"
 
-            response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" $URL)
+      if [ "$status" -eq 200 ]; then
+        echo "✅ Success! Space is awake."
+        exit 0
+      fi
 
-            body=$(echo "$response" | sed -e 's/HTTP_STATUS:.*//g')
-            status=$(echo "$response" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
+      echo "⚠️ Failed attempt $i. Retrying in $RETRY_DELAY seconds..."
+      sleep $RETRY_DELAY
+    done
 
-            echo "📦 Response Body:"
-            echo "$body"
-            echo "📡 HTTP Status: $status"
-
-            if [ "$status" -eq 200 ]; then
-              echo "✅ Success! Space is awake."
-              exit 0
-            fi
-
-            echo "⚠️ Failed attempt $i. Retrying in $RETRY_DELAY seconds..."
-            sleep $RETRY_DELAY
-          done
-
-          echo "❌ All retries failed."
-          exit 1
+    echo "❌ All retries failed."
+    exit 1
